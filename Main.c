@@ -58,12 +58,11 @@ typedef uint8_t  u8;
 typedef int8_t   s8;
 
 typedef uint32_t u32;
-typedef int32_t  s32;
+typedef int32_t  i32;
 
 typedef float    f32;
 typedef double   f64;
 
-float curr_time = 0.f;
 
 typedef struct color4_t
 {
@@ -130,6 +129,155 @@ typedef struct mat4x4_t
     float values[16];
 }mat4x4_t;
 
+typedef struct draw_command_t
+{
+    mesh_t          mesh;
+    cull_mode_t     cull_mode;
+    mat4x4_t        transform;
+}draw_command_t;
+
+typedef struct viewport_t 
+{
+    i32 xmin;
+    i32 ymin;
+    i32 xmax;
+    i32 ymax;
+}viewport_t;
+
+struct context_t
+{
+    SDL_Window*         window;
+    image_view_t        draw_buffer;
+    u32                 screen_width;
+    u32                 screen_height;
+    u32                 mouseX;
+    u32                 mouseY;
+    /* FLAGS */
+    bool                running;
+    bool                resize;
+    bool                rescale;
+    bool                render;
+    bool                dock;
+    bool                capture;
+    /* TIME */
+    uint32_t            start_time;
+    float               prev_time;
+    float               dt;
+    uint32_t            global_scale;
+    /* STUFF */
+    SDL_Cursor*         hand_cursor;
+    SDL_Cursor*         arrow_cursor;
+    SDL_Surface*        icon;
+}gc;
+
+float curr_time = 0.f;
+SDL_Surface* draw_surface;
+
+static vec3f_t cube_positions[] =
+{
+    // -X face
+    {-1.f, -1.f, -1.f},
+    {-1.f,  1.f, -1.f},
+    {-1.f, -1.f,  1.f},
+    {-1.f,  1.f,  1.f},
+
+    // +X face
+    { 1.f, -1.f, -1.f},
+    { 1.f,  1.f, -1.f},
+    { 1.f, -1.f,  1.f},
+    { 1.f,  1.f,  1.f},
+
+    // -Y face
+    {-1.f, -1.f, -1.f},
+    { 1.f, -1.f, -1.f},
+    {-1.f, -1.f,  1.f},
+    { 1.f, -1.f,  1.f},
+
+    // +Y face
+    {-1.f,  1.f, -1.f},
+    { 1.f,  1.f, -1.f},
+    {-1.f,  1.f,  1.f},
+    { 1.f,  1.f,  1.f},
+
+    // -Z face
+    {-1.f, -1.f, -1.f},
+    { 1.f, -1.f, -1.f},
+    {-1.f,  1.f, -1.f},
+    { 1.f,  1.f, -1.f},
+
+    // +Z face
+    {-1.f, -1.f,  1.f},
+    { 1.f, -1.f,  1.f},
+    {-1.f,  1.f,  1.f},
+    { 1.f,  1.f,  1.f},
+};
+
+static color4_t cube_colors[] =
+{
+    // -X face (Purple to Pink gradient)
+    {147.f, 51.f, 239.f, 255.f},     // Top left (Purple)
+    {255.f, 191.f, 0.f, 255.f},      // Bottom left (Amber)
+    {147.f, 51.f, 239.f, 255.f},     // Top right (Purple)
+    {255.f, 0.f, 128.f, 255.f},      // Bottom right (Deep Pink)
+
+    // +X face (Orange to Yellow gradient)
+    {255.f, 128.f, 0.f, 255.f},      // Top left (Orange)
+    {224.f, 64.f, 208.f, 255.f},     // Bottom left (Hot Pink)
+    {255.f, 128.f, 0.f, 255.f},      // Top right (Orange)
+    {255.f, 214.f, 0.f, 255.f},      // Bottom right (Yellow)
+
+    // -Y face (Cyan to Blue gradient)
+    {0.f, 108.f, 255.f, 255.f},      // Bottom left (Blue)
+    {64.f, 224.f, 208.f, 255.f},     // Top right (Turquoise)
+    {50.f, 205.f, 50.f, 255.f},      // Top left (Lime Green)
+    {0.f, 128.f, 255.f, 255.f},      // Bottom right (Dodger Blue)
+
+    // +Y face (Lime to Emerald gradient)
+    {0.f, 191.f, 255.f, 255.f},      // Top left (Deep Sky Blue)
+    {0.f, 128.f, 0.f, 255.f},        // Bottom left (Green)
+    {199.f, 21.f, 133.f, 255.f},     // Bottom left (Medium Violet Red)
+    {46.f, 139.f, 87.f, 255.f},      // Bottom right (Sea Green)
+
+    // -Z face (Red to Purple gradient)
+    {184.f, 115.f, 51.f, 255.f},     // Bottom left (Bronze)
+    {218.f, 165.f, 32.f, 255.f},     // Top right (Golden Rod)
+    {220.f, 20.f, 60.f, 255.f},      // Top right (Crimson)
+    {148.f, 0.f, 211.f, 255.f},      // Bottom right (Dark Violet)
+
+    // +Z face (Gold to Bronze gradient)
+    {255.f, 0.f, 0.f, 255.f},        // Top left (Red)
+    {255.f, 215.f, 0.f, 255.f},      // Top left (Gold)
+    {205.f, 127.f, 50.f, 255.f},     // Bottom right (Peru)
+    {124.f, 252.f, 0.f, 255.f},      // Top right (Lawn Green)
+};
+
+static u32 cube_indices[] =
+{
+    // -X face
+     0,  2,  1,
+     1,  2,  3,
+
+    // +X face
+     4,  5,  6,
+     6,  5,  7,
+
+    // -Y face
+     8,  9, 10,
+    10,  9, 11,
+
+    // +Y face
+    12, 14, 13,
+    14, 15, 13,
+
+    // -Z face
+    16, 18, 17,
+    17, 18, 19,
+
+    // +Z face
+    20, 21, 22,
+    21, 23, 22,
+};
+
 mat4x4_t mat_identity(void)
 {
     return (mat4x4_t){
@@ -142,10 +290,10 @@ mat4x4_t mat_identity(void)
 
 mat4x4_t mat_scale(vec3f_t s)
 {
-    return (mat4x4_t){
-        s.x, 0.f,  0.f,  0.f,
-        0.f,  s.y, 0.f,  0.f,
-        0.f,  0.f,  s.z, 0.f,
+    return (mat4x4_t) {
+        s.x,  0.f,  0.f,  0.f,
+        0.f,  s.y,  0.f,  0.f,
+        0.f,  0.f,  s.z,  0.f,
         0.f,  0.f,  0.f,  1.f,
     };
 }
@@ -209,26 +357,23 @@ mat4x4_t mat_rotate_zx(float angle)
     };
 }
 
-
-typedef struct draw_command_t
+mat4x4_t mat_perspective(float n, float f, float fovY, float aspect_ratio)
 {
-    mesh_t          mesh;
-    cull_mode_t     cull_mode;
-    mat4x4_t        transform;
-}draw_command_t;
+    float top   = n * tanf(fovY / 2.f);
+    float right = top * aspect_ratio;
 
-typedef struct viewport_t 
-{
-    s32 xmin;
-    s32 ymin;
-    s32 xmax;
-    s32 ymax;
-}viewport_t;
+    return (mat4x4_t) {
+        n / right,      0.f,       0.f,                    0.f,
+        0.f,            n / top,   0.f,                    0.f,
+        0.f,            0.f,       -(f + n) / (f - n),     - 2.f * f * n / (f - n),
+        0.f,            0.f,       -1.f,                   0.f,
+    };
+}
 
 vec4f_t viewport_apply(viewport_t const *vp, vec4f_t v)
 {
-    v.x = vp->xmin + (vp->xmax - vp->xmin) * (0.5f + 0.5f * v.x);
-    v.y = vp->ymin + (vp->ymax - vp->ymin) * (0.5f - 0.5f * v.y);
+    v.x = (float)vp->xmin + (float)(vp->xmax - vp->xmin) * (0.5f + 0.5f * v.x);
+    v.y = (float)vp->ymin + (float)(vp->ymax - vp->ymin) * (0.5f - 0.5f * v.y);
     return v;
 }
 
@@ -262,6 +407,14 @@ vec4f_t vec4f_mat_mul(mat4x4_t const *m, vec4f_t const *v)
         .z = m->values[ 8] * v->x + m->values[ 9] * v->y + m->values[10] * v->z + m->values[11] * v->w,
         .w = m->values[12] * v->x + m->values[13] * v->y + m->values[14] * v->z + m->values[15] * v->w
     };
+}
+
+inline vec4f_t perspective_divide(vec4f_t v)
+{
+    v.x /= v.w;
+    v.y /= v.w;
+    v.z /= v.w;
+    return v;
 }
 
 mat4x4_t mat4x4_mult(mat4x4_t const *m, mat4x4_t const *n)
@@ -349,138 +502,6 @@ mat4x4_t mat4x4_mult_simd(mat4x4_t const *m, mat4x4_t const *n)
     return res;
 }
 
-struct context_t
-{
-    SDL_Window*         window;
-    image_view_t        draw_buffer;
-    u32                 screen_width;
-    u32                 screen_height;
-    u32                 mouseX;
-    u32                 mouseY;
-    /* FLAGS */
-    bool                running;
-    bool                resize;
-    bool                rescale;
-    bool                render;
-    bool                dock;
-    bool                capture;
-    /* TIME */
-    uint32_t            start_time;
-    float               prev_time;
-    float               dt;
-    uint32_t            global_scale;
-    /* STUFF */
-    SDL_Cursor*         hand_cursor;
-    SDL_Cursor*         arrow_cursor;
-    SDL_Surface*        icon;
-}gc;
-
-SDL_Surface* draw_surface;
-
-static vec3f_t cube_positions[] =
-{
-    // -X face
-    {-1.f, -1.f, -1.f},
-    {-1.f,  1.f, -1.f},
-    {-1.f, -1.f,  1.f},
-    {-1.f,  1.f,  1.f},
-
-    // +X face
-    { 1.f, -1.f, -1.f},
-    { 1.f,  1.f, -1.f},
-    { 1.f, -1.f,  1.f},
-    { 1.f,  1.f,  1.f},
-
-    // -Y face
-    {-1.f, -1.f, -1.f},
-    { 1.f, -1.f, -1.f},
-    {-1.f, -1.f,  1.f},
-    { 1.f, -1.f,  1.f},
-
-    // +Y face
-    {-1.f,  1.f, -1.f},
-    { 1.f,  1.f, -1.f},
-    {-1.f,  1.f,  1.f},
-    { 1.f,  1.f,  1.f},
-
-    // -Z face
-    {-1.f, -1.f, -1.f},
-    { 1.f, -1.f, -1.f},
-    {-1.f,  1.f, -1.f},
-    { 1.f,  1.f, -1.f},
-
-    // +Z face
-    {-1.f, -1.f,  1.f},
-    { 1.f, -1.f,  1.f},
-    {-1.f,  1.f,  1.f},
-    { 1.f,  1.f,  1.f},
-};
-
-static color4_t cube_colors[] =
-{
-    // -X face
-    {0.f, 255.f, 255.f, 255.f},
-    {0.f, 255.f, 255.f, 255.f},
-    {0.f, 255.f, 255.f, 255.f},
-    {0.f, 255.f, 255.f, 255.f},
-
-    // +X face
-    {255.f, 0.f, 0.f, 255.f},
-    {255.f, 0.f, 0.f, 255.f},
-    {255.f, 0.f, 0.f, 255.f},
-    {255.f, 0.f, 0.f, 255.f},
-
-    // -Y face
-    {255.f, 0.f, 255.f, 255.f},
-    {255.f, 0.f, 255.f, 255.f},
-    {255.f, 0.f, 255.f, 255.f},
-    {255.f, 0.f, 255.f, 255.f},
-
-    // +Y face
-    {0.f, 255.f, 0.f, 255.f},
-    {0.f, 255.f, 0.f, 255.f},
-    {0.f, 255.f, 0.f, 255.f},
-    {0.f, 255.f, 0.f, 255.f},
-
-    // -Z face
-    {255.f, 255.f, 0.f, 255.f},
-    {255.f, 255.f, 0.f, 255.f},
-    {255.f, 255.f, 0.f, 255.f},
-    {255.f, 255.f, 0.f, 255.f},
-
-    // +Z face
-    {0.f, 0.f, 255.f, 255.f},
-    {0.f, 0.f, 255.f, 255.f},
-    {0.f, 0.f, 255.f, 255.f},
-    {0.f, 0.f, 255.f, 255.f},
-};
-
-static u32 cube_indices[] =
-{
-    // -X face
-     0,  2,  1,
-     1,  2,  3,
-
-    // +X face
-     4,  5,  6,
-     6,  5,  7,
-
-    // -Y face
-     8,  9, 10,
-    10,  9, 11,
-
-    // +Y face
-    12, 14, 13,
-    14, 15, 13,
-
-    // -Z face
-    16, 18, 17,
-    17, 18, 19,
-
-    // +Z face
-    20, 21, 22,
-    21, 23, 22,
-};
 
 SDL_Surface *surface_from_image(const char *path)
 {
@@ -867,7 +888,6 @@ void draw_mesh(image_view_t const *color_buf, draw_command_t const *command, vie
         vidx + 2 < command->mesh.count;
         vidx+=3)
     {
-
         u32 i0 = vidx+0;
         u32 i1 = vidx+1;
         u32 i2 = vidx+2;
@@ -883,10 +903,13 @@ void draw_mesh(image_view_t const *color_buf, draw_command_t const *command, vie
         vec4f_t p1 = vecf4_as_point((vec3f_t *)ATTR_AT(command->mesh.positions, i1));
         vec4f_t p2 = vecf4_as_point((vec3f_t *)ATTR_AT(command->mesh.positions, i2));
 
-        // Apply Transformation
         vec4f_t v0 = vec4f_mat_mul(&command->transform, &p0);
         vec4f_t v1 = vec4f_mat_mul(&command->transform, &p1);
         vec4f_t v2 = vec4f_mat_mul(&command->transform, &p2);
+
+        v0 = perspective_divide(v0);
+        v1 = perspective_divide(v1);
+        v2 = perspective_divide(v2);
 
         v0 = viewport_apply(vp, v0);
         v1 = viewport_apply(vp, v1);
@@ -925,19 +948,19 @@ void draw_mesh(image_view_t const *color_buf, draw_command_t const *command, vie
         }
 
         // Bounding Box
-        s32 xmin = MAX(vp->xmin, 0);
-        s32 xmax = MIN(vp->xmax, (s32)color_buf->width)-1;
-        s32 ymin = MAX(vp->ymin, 0);
-        s32 ymax = MIN(vp->ymax, (s32)color_buf->height)-1;
+        i32 xmin = MAX(vp->xmin, 0);
+        i32 xmax = MIN(vp->xmax, (i32)color_buf->width)-1;
+        i32 ymin = MAX(vp->ymin, 0);
+        i32 ymax = MIN(vp->ymax, (i32)color_buf->height)-1;
 
         xmin = MAX(xmin, MIN3(floor(v0.x), floor(v1.x), floor(v2.x)));
         xmax = MIN(xmax, MAX3(ceil(v0.x), ceil(v1.x), ceil(v2.x)));
         ymin = MAX(ymin, MIN3(floor(v0.y), floor(v1.y), floor(v2.y)));
         ymax = MIN(ymax, MAX3(ceil(v0.y), ceil(v1.y), ceil(v2.y)));
 
-        for (size_t y = ymin; y < ymax; ++y)
+        for (i32 y = ymin; y < ymax; ++y)
         {
-            for (size_t x = xmin; x < xmax; ++x)
+            for (i32 x = xmin; x < xmax; ++x)
             {
                 // point is considered in the middle of the pixel
                 vec4f_t p = {x + 0.5f, y + 0.5f, 0.f, 0.f};     
@@ -1049,8 +1072,8 @@ void render_all()
     viewport_t vp = {
         .xmin = 0,
         .ymin = 0,
-        .xmax = (s32)gc.draw_buffer.width,
-        .ymax = (s32)gc.draw_buffer.height
+        .xmax = (i32)gc.draw_buffer.width,
+        .ymax = (i32)gc.draw_buffer.height
     };
 
 /*    
@@ -1064,15 +1087,21 @@ void render_all()
         .transform = mat_rotate_zx(curr_time)
     };
 */
-    float aspect_ratio = (gc.screen_height * 1.f / gc.screen_width);
-    mat4x4_t aspect   = mat_scale((vec3f_t){aspect_ratio, 1.f, 1.f});
-    mat4x4_t scale    = mat_scale_const(0.5f);
-    mat4x4_t rotatezx = mat_rotate_zx(curr_time);
-    mat4x4_t rotatexy = mat_rotate_xy(curr_time * 1.61f);
+    float width_scale  = MIN(1.0f, gc.screen_height * 1.0f / gc.screen_width);
+    float height_scale = MIN(1.0f, gc.screen_width * 1.0f / gc.screen_height);
 
-    mat4x4_t transform = mat4x4_mult(&aspect, &scale);
-    transform = mat4x4_mult(&transform, &rotatezx);
-    transform = mat4x4_mult(&transform, &rotatexy);
+    mat4x4_t aspect      = mat_scale((vec3f_t){width_scale, height_scale, 1.f});
+    mat4x4_t scale       = mat_scale_const(0.5f);
+    mat4x4_t rotatezx    = mat_rotate_zx(curr_time);
+    mat4x4_t rotatexy    = mat_rotate_xy(curr_time * 1.61f);
+    mat4x4_t perspective = mat_perspective(0.01f, 10.f, M_PI / 3.f, 1.0f);
+    mat4x4_t translate   = mat_translate((vec3f_t){0.f, 0.f, -5.f});
+
+    mat4x4_t transform = mat4x4_mult(&scale, &rotatezx);        // First apply scale
+    transform = mat4x4_mult(&transform, &rotatexy);             // Then rotations
+    transform = mat4x4_mult(&transform, &translate);            // Then translation
+    transform = mat4x4_mult(&transform, &perspective);          // Then perspective
+    transform = mat4x4_mult(&transform, &aspect);            // Finally aspect ratio correction
 
     draw_command_t cmd = {
         .mesh = {
@@ -1186,7 +1215,7 @@ int main(int argc, char* argv[])
         // printf("%f\n", gc.dt);
 
         gc.dt = get_time_difference(&last_frame_start);
-        printf("%f\n", gc.dt*1000);
+        // printf("%f\n", gc.dt*1000);
 
         render_all();
 
