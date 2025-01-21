@@ -43,7 +43,7 @@
 #include "./include/util.h"
 #include "./include/font.h"
 
-#define M_PI		                3.14159265358979323846
+#define M_PI                        3.14159265358979323846
 #define M_PI_2                      1.57079632679489661923
 
 #define NUM_SIZES                   16
@@ -63,6 +63,10 @@ typedef int32_t  i32;
 typedef float    f32;
 typedef double   f64;
 
+#define fn              static
+#define internal        static
+#define local_persist   static
+#define global_variable static
 
 typedef struct color4_t
 {
@@ -124,6 +128,7 @@ typedef enum cull_mode_t
     CULL_MODE_CCW    // counter-clockwise
 }cull_mode_t;
 
+ 
 typedef struct mat4x4_t
 {
     float values[16];
@@ -173,7 +178,7 @@ struct context_t
 float curr_time = 0.f;
 SDL_Surface* draw_surface;
 
-static vec3f_t cube_positions[] =
+global_variable vec3f_t cube_positions[] =
 {
     // -X face
     {-1.f, -1.f, -1.f},
@@ -212,46 +217,46 @@ static vec3f_t cube_positions[] =
     { 1.f,  1.f,  1.f},
 };
 
-static color4_t cube_colors[] =
+global_variable color4_t cube_colors[] =
 {
-    // -X face (Purple to Pink gradient)
-    {147.f, 51.f, 239.f, 255.f},     // Top left (Purple)
-    {255.f, 191.f, 0.f, 255.f},      // Bottom left (Amber)
-    {147.f, 51.f, 239.f, 255.f},     // Top right (Purple)
-    {255.f, 0.f, 128.f, 255.f},      // Bottom right (Deep Pink)
+    // -X face 
+    {147.f, 51.f, 239.f, 255.f},     
+    {255.f, 191.f, 0.f, 255.f},      
+    {147.f, 51.f, 239.f, 255.f},     
+    {255.f, 0.f, 128.f, 255.f},      
 
-    // +X face (Orange to Yellow gradient)
-    {255.f, 128.f, 0.f, 255.f},      // Top left (Orange)
-    {224.f, 64.f, 208.f, 255.f},     // Bottom left (Hot Pink)
-    {255.f, 128.f, 0.f, 255.f},      // Top right (Orange)
-    {255.f, 214.f, 0.f, 255.f},      // Bottom right (Yellow)
+    // +X face 
+    {255.f, 128.f, 0.f, 255.f},    
+    {224.f, 64.f, 208.f, 255.f},   
+    {255.f, 128.f, 0.f, 255.f},    
+    {4.f, 20.f, 46.f, 255.f},      
 
-    // -Y face (Cyan to Blue gradient)
-    {0.f, 108.f, 255.f, 255.f},      // Bottom left (Blue)
-    {64.f, 224.f, 208.f, 255.f},     // Top right (Turquoise)
-    {50.f, 205.f, 50.f, 255.f},      // Top left (Lime Green)
-    {0.f, 128.f, 255.f, 255.f},      // Bottom right (Dodger Blue)
+    // -Y face 
+    {0.f, 108.f, 255.f, 255.f},    
+    {64.f, 224.f, 208.f, 255.f},   
+    {50.f, 205.f, 50.f, 255.f},    
+    {0.f, 128.f, 255.f, 255.f},    
 
-    // +Y face (Lime to Emerald gradient)
-    {0.f, 191.f, 255.f, 255.f},      // Top left (Deep Sky Blue)
-    {0.f, 128.f, 0.f, 255.f},        // Bottom left (Green)
-    {199.f, 21.f, 133.f, 255.f},     // Bottom left (Medium Violet Red)
-    {46.f, 139.f, 87.f, 255.f},      // Bottom right (Sea Green)
+    // +Y face 
+    {0.f, 191.f, 255.f, 255.f},    
+    {0.f, 128.f, 0.f, 255.f},      
+    {199.f, 21.f, 133.f, 255.f},   
+    {46.f, 139.f, 87.f, 255.f},    
 
-    // -Z face (Red to Purple gradient)
-    {184.f, 115.f, 51.f, 255.f},     // Bottom left (Bronze)
-    {218.f, 165.f, 32.f, 255.f},     // Top right (Golden Rod)
-    {220.f, 20.f, 60.f, 255.f},      // Top right (Crimson)
-    {148.f, 0.f, 211.f, 255.f},      // Bottom right (Dark Violet)
+    // -Z face 
+    {184.f, 115.f, 51.f, 255.f},   
+    {218.f, 165.f, 32.f, 255.f},   
+    {220.f, 20.f, 60.f, 255.f},    
+    {148.f, 0.f, 211.f, 255.f},    
 
-    // +Z face (Gold to Bronze gradient)
-    {255.f, 0.f, 0.f, 255.f},        // Top left (Red)
-    {255.f, 215.f, 0.f, 255.f},      // Top left (Gold)
-    {205.f, 127.f, 50.f, 255.f},     // Bottom right (Peru)
-    {124.f, 252.f, 0.f, 255.f},      // Top right (Lawn Green)
+    // +Z face 
+    {255.f, 0.f, 0.f, 255.f},        
+    {255.f, 215.f, 0.f, 255.f},      
+    {205.f, 127.f, 50.f, 255.f},     
+    {124.f, 252.f, 0.f, 255.f},      
 };
 
-static u32 cube_indices[] =
+global_variable u32 cube_indices[] =
 {
     // -X face
      0,  2,  1,
@@ -278,7 +283,7 @@ static u32 cube_indices[] =
     21, 23, 22,
 };
 
-mat4x4_t mat_identity(void)
+fn mat4x4_t mat_identity(void)
 {
     return (mat4x4_t){
         1.f, 0.f, 0.f, 0.f,
@@ -288,7 +293,7 @@ mat4x4_t mat_identity(void)
     };
 }
 
-mat4x4_t mat_scale(vec3f_t s)
+fn mat4x4_t mat_scale(vec3f_t s)
 {
     return (mat4x4_t) {
         s.x,  0.f,  0.f,  0.f,
@@ -298,7 +303,7 @@ mat4x4_t mat_scale(vec3f_t s)
     };
 }
 
-mat4x4_t mat_scale_const(f32 s)
+fn mat4x4_t mat_scale_const(f32 s)
 {
     vec3f_t vec = {
         .x = s,
@@ -308,7 +313,7 @@ mat4x4_t mat_scale_const(f32 s)
     return mat_scale(vec);
 }
 
-mat4x4_t mat_translate(vec3f_t s)
+fn mat4x4_t mat_translate(vec3f_t s)
 {
     return (mat4x4_t){
         1.f, 0.f, 0.f, s.x,
@@ -318,7 +323,7 @@ mat4x4_t mat_translate(vec3f_t s)
     };
 }
 
-mat4x4_t mat_rotate_xy(float angle)
+fn mat4x4_t mat_rotate_xy(float angle)
 {
     float cos = cosf(angle);
     float sin = sinf(angle);
@@ -331,7 +336,7 @@ mat4x4_t mat_rotate_xy(float angle)
     };
 }
 
-mat4x4_t mat_rotate_yz(float angle)
+fn mat4x4_t mat_rotate_yz(float angle)
 {
     float cos = cosf(angle);
     float sin = sinf(angle);
@@ -344,7 +349,7 @@ mat4x4_t mat_rotate_yz(float angle)
     };
 }
 
-mat4x4_t mat_rotate_zx(float angle)
+fn mat4x4_t mat_rotate_zx(float angle)
 {
     float cos = cosf(angle);
     float sin = sinf(angle);
@@ -357,7 +362,7 @@ mat4x4_t mat_rotate_zx(float angle)
     };
 }
 
-mat4x4_t mat_perspective(float n, float f, float fovY, float aspect_ratio)
+fn mat4x4_t mat_perspective(float n, float f, float fovY, float aspect_ratio)
 {
     float top   = n * tanf(fovY / 2.f);
     float right = top * aspect_ratio;
@@ -370,14 +375,14 @@ mat4x4_t mat_perspective(float n, float f, float fovY, float aspect_ratio)
     };
 }
 
-vec4f_t viewport_apply(viewport_t const *vp, vec4f_t v)
+fn vec4f_t viewport_apply(viewport_t const *vp, vec4f_t v)
 {
     v.x = (float)vp->xmin + (float)(vp->xmax - vp->xmin) * (0.5f + 0.5f * v.x);
     v.y = (float)vp->ymin + (float)(vp->ymax - vp->ymin) * (0.5f - 0.5f * v.y);
     return v;
 }
 
-vec4f_t vec4f_mat_mul_SIMD(mat4x4_t const *m, vec4f_t const *v) 
+fn vec4f_t vec4f_mat_mul_SIMD(mat4x4_t const *m, vec4f_t const *v) 
 {
     __m128 vec = _mm_set_ps(v->w, v->z, v->y, v->x);
 
@@ -399,7 +404,7 @@ vec4f_t vec4f_mat_mul_SIMD(mat4x4_t const *m, vec4f_t const *v)
     return (vec4f_t){x, y, z, w};
 }
 
-vec4f_t vec4f_mat_mul(mat4x4_t const *m, vec4f_t const *v)
+fn vec4f_t vec4f_mat_mul(mat4x4_t const *m, vec4f_t const *v)
 {
     return (vec4f_t){
         .x = m->values[ 0] * v->x + m->values[ 1] * v->y + m->values[ 2] * v->z + m->values[ 3] * v->w,
@@ -409,7 +414,7 @@ vec4f_t vec4f_mat_mul(mat4x4_t const *m, vec4f_t const *v)
     };
 }
 
-inline vec4f_t perspective_divide(vec4f_t v)
+fn inline vec4f_t perspective_divide(vec4f_t v)
 {
     v.x /= v.w;
     v.y /= v.w;
@@ -417,7 +422,7 @@ inline vec4f_t perspective_divide(vec4f_t v)
     return v;
 }
 
-mat4x4_t mat4x4_mult(mat4x4_t const *m, mat4x4_t const *n)
+fn mat4x4_t mat4x4_mult(mat4x4_t const *m, mat4x4_t const *n)
 {
     float const m00 = m->values[0];
     float const m01 = m->values[1];
@@ -475,35 +480,41 @@ mat4x4_t mat4x4_mult(mat4x4_t const *m, mat4x4_t const *n)
     return res;
 }
 
-mat4x4_t mat4x4_mult_simd(mat4x4_t const *m, mat4x4_t const *n) 
+fn mat4x4_t mat4x4_mult_simd(mat4x4_t const *m, mat4x4_t const *n)
 {
     mat4x4_t res;
     
-    __m128 row0 = _mm_load_ps(&m->values[0]);
-    __m128 row1 = _mm_load_ps(&m->values[4]);
-    __m128 row2 = _mm_load_ps(&m->values[8]);
-    __m128 row3 = _mm_load_ps(&m->values[12]);
+    __m128 col0 = _mm_load_ps(&m->values[0]);
+    __m128 col1 = _mm_load_ps(&m->values[4]);
+    __m128 col2 = _mm_load_ps(&m->values[8]);
+    __m128 col3 = _mm_load_ps(&m->values[12]);
     
     for (int i = 0; i < 4; i++) 
     {
-        __m128 brod0 = _mm_set1_ps(n->values[i]);
-        __m128 brod1 = _mm_set1_ps(n->values[i + 4]);
-        __m128 brod2 = _mm_set1_ps(n->values[i + 8]);
-        __m128 brod3 = _mm_set1_ps(n->values[i + 12]);
+        __m128 n0 = _mm_set1_ps(n->values[i*4 + 0]);
+        __m128 n1 = _mm_set1_ps(n->values[i*4 + 1]);
+        __m128 n2 = _mm_set1_ps(n->values[i*4 + 2]);
+        __m128 n3 = _mm_set1_ps(n->values[i*4 + 3]);
         
-        __m128 result = _mm_mul_ps(row0, brod0);
-        result = _mm_add_ps(result, _mm_mul_ps(row1, brod1));
-        result = _mm_add_ps(result, _mm_mul_ps(row2, brod2));
-        result = _mm_add_ps(result, _mm_mul_ps(row3, brod3));
+        __m128 result = _mm_add_ps(
+            _mm_add_ps(
+                _mm_mul_ps(col0, n0),
+                _mm_mul_ps(col1, n1)
+            ),
+            _mm_add_ps(
+                _mm_mul_ps(col2, n2),
+                _mm_mul_ps(col3, n3)
+            )
+        );
         
-        _mm_store_ps(&res.values[i * 4], result);
+        _mm_store_ps(&res.values[i*4], result);
     }
     
     return res;
 }
 
 
-SDL_Surface *surface_from_image(const char *path)
+fn SDL_Surface *surface_from_image(const char *path)
 {
     int req_format = STBI_rgb_alpha;
     int width, height, n;
@@ -536,7 +547,7 @@ SDL_Surface *surface_from_image(const char *path)
     return surf;
 }
 
-void set_dark_mode(SDL_Window *window)
+fn void set_dark_mode(SDL_Window *window)
 {
     #ifdef _WIN32
         SDL_SysWMinfo wmInfo;
@@ -551,7 +562,7 @@ void set_dark_mode(SDL_Window *window)
     #endif
 }
 
-SDL_Color get_rand_color(void) 
+fn SDL_Color get_rand_color(void) 
 {
     srand((unsigned int)time(NULL));
     
@@ -564,7 +575,7 @@ SDL_Color get_rand_color(void)
 }
 
 
-float sign(Point p1, Point p2, Point p3) 
+fn float sign(Point p1, Point p2, Point p3) 
 {
     return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
 }
@@ -573,7 +584,7 @@ float sign(Point p1, Point p2, Point p3)
     only points to the left of all three edges
     are precisely the points inside the triangle
  */
-bool isPointInTriangle(Point pt, Point v1, Point v2, Point v3) 
+fn bool isPointInTriangle(Point pt, Point v1, Point v2, Point v3) 
 {
     bool b1, b2, b3;
     
@@ -588,7 +599,7 @@ bool isPointInTriangle(Point pt, Point v1, Point v2, Point v3)
 /*
     convert normalized color to 0->255 range
 */
-inline color4_t to_color4(vec4f_t const c)
+fn inline color4_t to_color4(vec4f_t const c)
 {
     color4_t res;
     res.r = MAX(0.0f,MIN(255.0f, c.x * 255.0f));
@@ -599,44 +610,43 @@ inline color4_t to_color4(vec4f_t const c)
     return res;
 }
 
-inline vec4f_t vec4f_as_vector(vec3f_t const  *v)
+fn inline vec4f_t vec4f_as_vector(vec3f_t const  *v)
 {
     return (vec4f_t){v->x, v->y, v->z, 0.0f};
 }
 
-inline vec4f_t vecf4_as_point(vec3f_t const *v)
+fn inline vec4f_t vecf4_as_point(vec3f_t const *v)
 {
     return (vec4f_t){v->x, v->y, v->z, 1.0f};
 }
 
-inline vec4f_t vec4f_sub (vec4f_t const *v0, vec4f_t const  *v1)
+fn inline vec4f_t vec4f_sub (vec4f_t const *v0, vec4f_t const  *v1)
 {
     return (vec4f_t){v0->x - v1->x, v0->y - v1->y, v0->z - v1->z, v0->w - v1->w};
 }
 
-inline void vecf4_swap (vec4f_t *v0, vec4f_t *v1)
+fn inline void vecf4_swap (vec4f_t *v0, vec4f_t *v1)
 {
     vec4f_t const tmp = *v0;
     *v0 = *v1;
     *v1 = tmp;
 }
 
-inline void color4_swap (color4_t *c0, color4_t *c1)
+fn inline void color4_swap (color4_t *c0, color4_t *c1)
 {
-
     color4_t const tmp = *c0;
 
     *c0 = *c1;
     *c1 = tmp;
 }
 
-inline float vec4f_det2D(vec4f_t const *v0, vec4f_t const* v1)
+fn inline float vec4f_det2D(vec4f_t const *v0, vec4f_t const* v1)
 {
     return v0->x * v1->y - v0->y * v1->x;
 }
 
 /* ----------------  Events -------------------- */
-void poll_events()
+fn void poll_events()
 {
     //ZoneScoped;
 
@@ -791,7 +801,7 @@ void poll_events()
     }
 }
 
-int EventWatch(void *userdata, SDL_Event *event) 
+fn int EventWatch(void *userdata, SDL_Event *event) 
 {
     (void) userdata;
     
@@ -803,7 +813,7 @@ int EventWatch(void *userdata, SDL_Event *event)
     return 1;
 }
 
-void clear_screen(image_view_t const *color_buf, color4_t const color)
+fn void clear_screen(image_view_t const *color_buf, color4_t const color)
 {
     for (int y = 0; y < color_buf->height; ++y){
         for(int x = 0; x < color_buf->width; ++x){        
@@ -813,7 +823,7 @@ void clear_screen(image_view_t const *color_buf, color4_t const color)
 }
 
 
-void draw_triangle(image_view_t const *color_buf, Point v1, Point v2, Point v3)
+fn void draw_triangle(image_view_t const *color_buf, Point v1, Point v2, Point v3)
 {
     /* Bounding Box */
     int minX = MIN3(v1.x, v2.x, v3.x);
@@ -837,14 +847,14 @@ void draw_triangle(image_view_t const *color_buf, Point v1, Point v2, Point v3)
     }
 }
 
-void swap(int* a, int* b) 
+fn void swap(int* a, int* b) 
 {
     int temp = *a;
     *a = *b;
     *b = temp;
 }
 
-void draw_line(image_view_t const *color_buf, int x0, int y0, int x1, int y1, vec4f_t const color)
+fn void draw_line(image_view_t const *color_buf, int x0, int y0, int x1, int y1, vec4f_t const color)
 {
     bool steep = false;
     
@@ -882,7 +892,7 @@ void draw_line(image_view_t const *color_buf, int x0, int y0, int x1, int y1, ve
     }
 }
 
-void draw_mesh(image_view_t const *color_buf, draw_command_t const *command, viewport_t const *vp)
+fn void draw_mesh(image_view_t const *color_buf, draw_command_t const *command, viewport_t const *vp)
 {
     for(size_t vidx = 0;
         vidx + 2 < command->mesh.count;
@@ -1006,7 +1016,7 @@ void draw_mesh(image_view_t const *color_buf, draw_command_t const *command, vie
     header[15] = ((h) >> 8) & 0xFF;\
     header[16] = (b)
 
-void export_image(image_view_t const *color_buf, const char *filename) 
+fn void export_image(image_view_t const *color_buf, const char *filename) 
 {
     FILE *file = fopen(filename, "wb");
 
@@ -1020,8 +1030,8 @@ void export_image(image_view_t const *color_buf, const char *filename)
 
     fwrite(header, sizeof(uint8_t), 18, file);
 
-    for (int y = 0; y < color_buf->height; ++y) {
-        for (int x = 0; x < color_buf->width; ++x) {
+    for (size_t y = 0; y < color_buf->height; ++y) {
+        for (size_t x = 0; x < color_buf->width; ++x) {
             color4_t pixel = COLOR_BUF_AT(color_buf, x, y);
             uint8_t bgra[4] = { pixel.b, pixel.g, pixel.r, pixel.a };
             fwrite(bgra, sizeof(uint8_t), 4, file);
@@ -1031,13 +1041,12 @@ void export_image(image_view_t const *color_buf, const char *filename)
     fclose(file);
 }
 
-void render_all()
+fn void render_all(void)
 {
     curr_time += gc.dt;
 
-    if(!draw_surface)
-    {
-        draw_surface = SDL_CreateRGBSurfaceWithFormat(0, gc.screen_width, gc.screen_height, 32, SDL_PIXELFORMAT_RGBA32);
+    if(!draw_surface){
+        draw_surface = SDL_CreateRGBSurfaceWithFormat(0, (int)gc.screen_width, (int)gc.screen_height, 32, SDL_PIXELFORMAT_RGBA32);
         SDL_SetSurfaceBlendMode(draw_surface, SDL_BLENDMODE_NONE);
         gc.draw_buffer.pixels = (color4_t *)draw_surface->pixels;
         gc.draw_buffer.height = gc.screen_height;
@@ -1045,30 +1054,8 @@ void render_all()
     }
     
     clear_screen(&gc.draw_buffer, (color4_t){40.f, 42.f, 54.f, 255.f});
-
     // draw_triangle(&gc.draw_buffer,(Point){100,100},(Point){200,100}, (Point){100,200});
 
-/*  vec3f_t positions[] =
-    {
-        {-0.5f, -0.5f, 0.f},
-        {-0.5f,  0.5f, 0.f},
-        { 0.5f, -0.5f, 0.f},
-        { 0.5f,  0.5f, 0.f},
-    };
-
-    color4_t colors[] =
-    {
-        {255, 0, 0, 255},
-        {0, 255, 0, 255},
-        {0, 0, 255, 255},
-        {255, 255, 255, 255},
-    };
-
-    u32 indices[] = {
-        0, 1, 2,
-        2, 1, 3,
-    };
-*/
     viewport_t vp = {
         .xmin = 0,
         .ymin = 0,
@@ -1076,32 +1063,21 @@ void render_all()
         .ymax = (i32)gc.draw_buffer.height
     };
 
-/*    
-    draw_command_t cmd = {
-        .mesh = {
-            .positions    = ATTR_NEW(positions),
-            .colors       = ATTR_NEW(colors),
-            .indices      = indices,
-            .count        = 6,
-        },
-        .transform = mat_rotate_zx(curr_time)
-    };
-*/
-    float width_scale  = MIN(1.0f, gc.screen_height * 1.0f / gc.screen_width);
-    float height_scale = MIN(1.0f, gc.screen_width * 1.0f / gc.screen_height);
+    float width_scale  = MIN(1.0f, (float)gc.screen_height * 1.0f / (float)gc.screen_width);
+    float height_scale = MIN(1.0f, (float)gc.screen_width * 1.0f / (float)gc.screen_height);
 
     mat4x4_t aspect      = mat_scale((vec3f_t){width_scale, height_scale, 1.f});
-    mat4x4_t scale       = mat_scale_const(0.5f);
+    mat4x4_t scale       = mat_scale_const(1.0f);
     mat4x4_t rotatezx    = mat_rotate_zx(curr_time);
     mat4x4_t rotatexy    = mat_rotate_xy(curr_time * 1.61f);
-    mat4x4_t perspective = mat_perspective(0.01f, 10.f, M_PI / 3.f, 1.0f);
+    mat4x4_t perspective = mat_perspective(0.01f, 10.f, (float)(M_PI / 3.f), (float)gc.screen_width * 1.0f / (float)gc.screen_height);
     mat4x4_t translate   = mat_translate((vec3f_t){0.f, 0.f, -5.f});
 
-    mat4x4_t transform = mat4x4_mult(&scale, &rotatezx);        // First apply scale
-    transform = mat4x4_mult(&transform, &rotatexy);             // Then rotations
-    transform = mat4x4_mult(&transform, &translate);            // Then translation
-    transform = mat4x4_mult(&transform, &perspective);          // Then perspective
-    transform = mat4x4_mult(&transform, &aspect);            // Finally aspect ratio correction
+    mat4x4_t transform = mat4x4_mult(&scale, &rotatezx);        
+    transform = mat4x4_mult(&transform, &rotatexy);             
+    transform = mat4x4_mult(&transform, &translate);            
+    transform = mat4x4_mult(&transform, &perspective);          
+    // transform = mat4x4_mult(&transform, &aspect);            
 
     draw_command_t cmd = {
         .mesh = {
@@ -1117,7 +1093,12 @@ void render_all()
     draw_mesh(&gc.draw_buffer, &cmd, &vp);
     // draw_line(&gc.draw_buffer,0,0,gc.screen_width,gc.screen_height,(vec4f_t){0.0f, 0.0f, 0.5f, 1.0f});
 
-    SDL_Rect rect = {.x = 0, .y = 0, .w = gc.screen_width, .h = gc.screen_height};
+    SDL_Rect rect = {
+        .x = 0,
+        .y = 0,
+        .w = (int)gc.screen_width,
+        .h = (int)gc.screen_height
+    };
 
     SDL_BlitSurface(draw_surface, &rect, SDL_GetWindowSurface(gc.window), &rect);
     SDL_UpdateWindowSurface(gc.window);
@@ -1129,7 +1110,7 @@ void render_all()
 }
 
 
-void init_all(void)
+fn void init_all(void)
 {
     gc.screen_width  = 800;
     gc.screen_height = 600;
@@ -1163,7 +1144,7 @@ void init_all(void)
     set_dark_mode(gc.window);
 }
 
-float get_time_difference(void *last_time) 
+fn float get_time_difference(void *last_time) 
 {
     float dt = 0.0f;
 
@@ -1223,8 +1204,8 @@ int main(int argc, char* argv[])
         // float elapsedTime = (frame_time > 0) ? frame_time : 1;
         
         // if(elapsedTime < FPS(60)){
-             // SDL_Delay(FPS(60)-elapsedTime);
-         // }
+            // SDL_Delay(FPS(60)-elapsedTime);
+        // }
     }
     SDL_Quit();
     return 0;
