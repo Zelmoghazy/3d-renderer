@@ -60,6 +60,9 @@ typedef int8_t   s8;
 typedef uint32_t u32;
 typedef int32_t  i32;
 
+typedef uint64_t u64;
+typedef int64_t  i64;
+
 typedef float    f32;
 typedef double   f64;
 
@@ -91,6 +94,13 @@ typedef struct vec4f_t
     f32 w;    
 }vec4f_t;
 
+typedef struct vertex_t
+{
+    vec4f_t pos;
+    vec4f_t col;
+}vertex_t;
+
+
 #define ATTR_AT(a,i)   ((char const *)((a).ptr) + (a).stride * (i))
 #define ATTR_NEW(p)    (attribute_t) {.ptr = (p), .stride = sizeof(typeof((p)[0]))}
 
@@ -115,11 +125,14 @@ typedef struct mesh_t
     u32             count;
 }mesh_t;
 
-typedef struct 
+typedef struct model_t
 {
-    float x;
-    float y;
-} Point;
+    vec3f_t     *positions;
+    color4_t    *colors;
+    u32         *indices;
+    u32         vertex_count;
+    u32         index_count;
+}model_t;
 
 typedef enum cull_mode_t
 {
@@ -127,11 +140,10 @@ typedef enum cull_mode_t
     CULL_MODE_CW,    // clockwise
     CULL_MODE_CCW    // counter-clockwise
 }cull_mode_t;
-
  
 typedef struct mat4x4_t
 {
-    float values[16];
+    f32 values[16];
 }mat4x4_t;
 
 typedef struct draw_command_t
@@ -157,25 +169,28 @@ struct context_t
     u32                 screen_height;
     u32                 mouseX;
     u32                 mouseY;
+    u32                 global_scale;
     /* FLAGS */
     bool                running;
     bool                resize;
     bool                rescale;
     bool                render;
     bool                dock;
+    bool                debug;
     bool                capture;
     /* TIME */
-    uint32_t            start_time;
-    float               prev_time;
-    float               dt;
-    uint32_t            global_scale;
+    u32                 start_time;
+    f32                 prev_time;
+    f32                 dt;
+    u64                 last_render_time;
+    u64                 render_interval;
     /* STUFF */
     SDL_Cursor*         hand_cursor;
     SDL_Cursor*         arrow_cursor;
     SDL_Surface*        icon;
 }gc;
 
-float curr_time = 0.f;
+f32 curr_time = 0.f;
 SDL_Surface* draw_surface;
 
 global_variable vec3f_t cube_positions[] =
@@ -323,10 +338,10 @@ fn mat4x4_t mat_translate(vec3f_t s)
     };
 }
 
-fn mat4x4_t mat_rotate_xy(float angle)
+fn mat4x4_t mat_rotate_xy(f32 angle)
 {
-    float cos = cosf(angle);
-    float sin = sinf(angle);
+    f32 cos = cosf(angle);
+    f32 sin = sinf(angle);
 
     return (mat4x4_t){
         cos, -sin, 0.f, 0.f,
@@ -336,10 +351,10 @@ fn mat4x4_t mat_rotate_xy(float angle)
     };
 }
 
-fn mat4x4_t mat_rotate_yz(float angle)
+fn mat4x4_t mat_rotate_yz(f32 angle)
 {
-    float cos = cosf(angle);
-    float sin = sinf(angle);
+    f32 cos = cosf(angle);
+    f32 sin = sinf(angle);
 
     return (mat4x4_t){
         1.f, 0.f,  0.f, 0.f,
@@ -349,10 +364,10 @@ fn mat4x4_t mat_rotate_yz(float angle)
     };
 }
 
-fn mat4x4_t mat_rotate_zx(float angle)
+fn mat4x4_t mat_rotate_zx(f32 angle)
 {
-    float cos = cosf(angle);
-    float sin = sinf(angle);
+    f32 cos = cosf(angle);
+    f32 sin = sinf(angle);
 
     return (mat4x4_t){
          cos, 0.f, sin, 0.f,
@@ -362,10 +377,10 @@ fn mat4x4_t mat_rotate_zx(float angle)
     };
 }
 
-fn mat4x4_t mat_perspective(float n, float f, float fovY, float aspect_ratio)
+fn mat4x4_t mat_perspective(f32 n, f32 f, f32 fovY, f32 aspect_ratio)
 {
-    float top   = n * tanf(fovY / 2.f);
-    float right = top * aspect_ratio;
+    f32 top   = n * tanf(fovY / 2.f);
+    f32 right = top * aspect_ratio;
 
     return (mat4x4_t) {
         n / right,      0.f,       0.f,                    0.f,
@@ -377,8 +392,8 @@ fn mat4x4_t mat_perspective(float n, float f, float fovY, float aspect_ratio)
 
 fn vec4f_t viewport_apply(viewport_t const *vp, vec4f_t v)
 {
-    v.x = (float)vp->xmin + (float)(vp->xmax - vp->xmin) * (0.5f + 0.5f * v.x);
-    v.y = (float)vp->ymin + (float)(vp->ymax - vp->ymin) * (0.5f - 0.5f * v.y);
+    v.x = (f32)vp->xmin + (f32)(vp->xmax - vp->xmin) * (0.5f + 0.5f * v.x);
+    v.y = (f32)vp->ymin + (f32)(vp->ymax - vp->ymin) * (0.5f - 0.5f * v.y);
     return v;
 }
 
@@ -396,10 +411,10 @@ fn vec4f_t vec4f_mat_mul_SIMD(mat4x4_t const *m, vec4f_t const *v)
     __m128 result_z = _mm_mul_ps(col2, vec);
     __m128 result_w = _mm_mul_ps(col3, vec);
 
-    float x = _mm_cvtss_f32(_mm_hadd_ps(_mm_hadd_ps(result_x, result_x), result_x));
-    float y = _mm_cvtss_f32(_mm_hadd_ps(_mm_hadd_ps(result_y, result_y), result_y));
-    float z = _mm_cvtss_f32(_mm_hadd_ps(_mm_hadd_ps(result_z, result_z), result_z));
-    float w = _mm_cvtss_f32(_mm_hadd_ps(_mm_hadd_ps(result_w, result_w), result_w));
+    f32 x = _mm_cvtss_f32(_mm_hadd_ps(_mm_hadd_ps(result_x, result_x), result_x));
+    f32 y = _mm_cvtss_f32(_mm_hadd_ps(_mm_hadd_ps(result_y, result_y), result_y));
+    f32 z = _mm_cvtss_f32(_mm_hadd_ps(_mm_hadd_ps(result_z, result_z), result_z));
+    f32 w = _mm_cvtss_f32(_mm_hadd_ps(_mm_hadd_ps(result_w, result_w), result_w));
 
     return (vec4f_t){x, y, z, w};
 }
@@ -424,39 +439,39 @@ fn inline vec4f_t perspective_divide(vec4f_t v)
 
 fn mat4x4_t mat4x4_mult(mat4x4_t const *m, mat4x4_t const *n)
 {
-    float const m00 = m->values[0];
-    float const m01 = m->values[1];
-    float const m02 = m->values[2];
-    float const m03 = m->values[3];
-    float const m10 = m->values[4];
-    float const m11 = m->values[5];
-    float const m12 = m->values[6];
-    float const m13 = m->values[7];
-    float const m20 = m->values[8];
-    float const m21 = m->values[9];
-    float const m22 = m->values[10];
-    float const m23 = m->values[11];
-    float const m30 = m->values[12];
-    float const m31 = m->values[13];
-    float const m32 = m->values[14];
-    float const m33 = m->values[15];
+    f32 const m00 = m->values[0];
+    f32 const m01 = m->values[1];
+    f32 const m02 = m->values[2];
+    f32 const m03 = m->values[3];
+    f32 const m10 = m->values[4];
+    f32 const m11 = m->values[5];
+    f32 const m12 = m->values[6];
+    f32 const m13 = m->values[7];
+    f32 const m20 = m->values[8];
+    f32 const m21 = m->values[9];
+    f32 const m22 = m->values[10];
+    f32 const m23 = m->values[11];
+    f32 const m30 = m->values[12];
+    f32 const m31 = m->values[13];
+    f32 const m32 = m->values[14];
+    f32 const m33 = m->values[15];
 
-    float const n00 = n->values[0];
-    float const n01 = n->values[1];
-    float const n02 = n->values[2];
-    float const n03 = n->values[3];
-    float const n10 = n->values[4];
-    float const n11 = n->values[5];
-    float const n12 = n->values[6];
-    float const n13 = n->values[7];
-    float const n20 = n->values[8];
-    float const n21 = n->values[9];
-    float const n22 = n->values[10];
-    float const n23 = n->values[11];
-    float const n30 = n->values[12];
-    float const n31 = n->values[13];
-    float const n32 = n->values[14];
-    float const n33 = n->values[15];
+    f32 const n00 = n->values[0];
+    f32 const n01 = n->values[1];
+    f32 const n02 = n->values[2];
+    f32 const n03 = n->values[3];
+    f32 const n10 = n->values[4];
+    f32 const n11 = n->values[5];
+    f32 const n12 = n->values[6];
+    f32 const n13 = n->values[7];
+    f32 const n20 = n->values[8];
+    f32 const n21 = n->values[9];
+    f32 const n22 = n->values[10];
+    f32 const n23 = n->values[11];
+    f32 const n30 = n->values[12];
+    f32 const n31 = n->values[13];
+    f32 const n32 = n->values[14];
+    f32 const n33 = n->values[15];
 
     mat4x4_t res;
 
@@ -562,38 +577,6 @@ fn void set_dark_mode(SDL_Window *window)
     #endif
 }
 
-fn SDL_Color get_rand_color(void) 
-{
-    srand((unsigned int)time(NULL));
-    
-    Uint8 r = rand() % 256;
-    Uint8 g = rand() % 256;
-    Uint8 b = rand() % 256;
-
-    SDL_Color color = { r, g, b, 255 }; 
-    return color;
-}
-
-
-fn float sign(Point p1, Point p2, Point p3) 
-{
-    return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
-}
-
-/* 
-    only points to the left of all three edges
-    are precisely the points inside the triangle
- */
-fn bool isPointInTriangle(Point pt, Point v1, Point v2, Point v3) 
-{
-    bool b1, b2, b3;
-    
-    b1 = sign(pt, v1, v2) < 0.0f;
-    b2 = sign(pt, v2, v3) < 0.0f;
-    b3 = sign(pt, v3, v1) < 0.0f;
-    
-    return ((b1 == b2) && (b2 == b3));
-}
 
 
 /*
@@ -640,9 +623,14 @@ fn inline void color4_swap (color4_t *c0, color4_t *c1)
     *c1 = tmp;
 }
 
-fn inline float vec4f_det2D(vec4f_t const *v0, vec4f_t const* v1)
+fn inline f32 vec4f_det2D(vec4f_t const *v0, vec4f_t const* v1)
 {
     return v0->x * v1->y - v0->y * v1->x;
+}
+
+fn inline f32 vec4f_dot(vec4f_t const *v0, vec4f_t const* v1)
+{
+    return v0->x * v1->x + v0->y * v1->y + v0->z * v1->z + v0->w * v1->w;
 }
 
 /* ----------------  Events -------------------- */
@@ -782,6 +770,7 @@ fn void poll_events()
                 else if((keyboard_state_array[SDL_SCANCODE_LCTRL]) &&
                         (keyboard_state_array[SDL_SCANCODE_S]))
                 {
+                    gc.debug ^= 1;
                 }
                 else if((keyboard_state_array[SDL_SCANCODE_LCTRL]) &&
                         (keyboard_state_array[SDL_SCANCODE_C]))
@@ -805,8 +794,18 @@ fn int EventWatch(void *userdata, SDL_Event *event)
 {
     (void) userdata;
     
-    if (event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_RESIZED) {
+    u64 current_time = SDL_GetTicks64();
+
+    if (event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_RESIZED) 
+    {
         gc.resize = true;
+    }
+
+    if (gc.resize &&  (current_time - gc.last_render_time >= gc.render_interval || gc.last_render_time == 0)) 
+    {
+        gc.resize = false;
+        gc.last_render_time = current_time;
+        // do what you want executed inside the events spam
         SDL_FlushEvent(SDL_WINDOWEVENT_RESIZED);
         return 0;
     }
@@ -822,36 +821,171 @@ fn void clear_screen(image_view_t const *color_buf, color4_t const color)
     }
 }
 
-
-fn void draw_triangle(image_view_t const *color_buf, Point v1, Point v2, Point v3)
-{
-    /* Bounding Box */
-    int minX = MIN3(v1.x, v2.x, v3.x);
-    int minY = MIN3(v1.y, v2.y, v3.y);
-    int maxX = MAX3(v1.x, v2.x, v3.x);
-    int maxY = MAX3(v1.y, v2.y, v3.y);
-
-    minX = MAX(minX, 0);
-    minY = MAX(minY, 0);
-    maxX = MIN(maxX, gc.screen_width - 1);
-    maxY = MIN(maxY, gc.screen_height - 1);
-
-    Point p;
-    for (p.y = minY; p.y <= maxY; p.y++){
-        for (p.x = minX; p.x <= maxX; p.x++){
-            if(isPointInTriangle(p, v1, v2, v3))
-            {
-                color_buf->pixels[(int)p.x+(int)p.y*color_buf->width] = to_color4((vec4f_t){150,150,150,255});
-            }
-        }
-    }
-}
-
 fn void swap(int* a, int* b) 
 {
     int temp = *a;
     *a = *b;
     *b = temp;
+}
+
+fn color4_t get_random_color(void)
+{
+    return (color4_t){
+        .r = rand() % 256,
+        .g = rand() % 256,
+        .b = rand() % 256,
+        .a = 255
+    };
+}
+
+fn model_t* load_obj(const char *filename)
+{
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+        fprintf(stderr, "Failed to open OBJ file: %s\n", filename);
+        return NULL;
+    }
+
+    model_t *model = (model_t*)malloc(sizeof(model_t));
+    if (!model) {
+        fclose(file);
+        return NULL;
+    }
+
+    // initial capacity
+    u32 max_vertices = 1000;
+    u32 max_indices = 3000;
+    
+    model->positions = (vec3f_t*)malloc(sizeof(vec3f_t) * max_vertices);
+    model->colors = (color4_t*)malloc(sizeof(color4_t) * max_vertices);
+    model->indices = (u32*)malloc(sizeof(u32) * max_indices);
+    model->vertex_count = 0;
+    model->index_count = 0;
+
+    // Seed random number generator
+    srand((unsigned int)time(NULL));
+
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        // Skip comments and empty lines
+        if (line[0] == '#' || line[0] == '\n') continue;
+
+        // Parse vertex positions
+        if (line[0] == 'v' && line[1] == ' ') {
+            if (model->vertex_count >= max_vertices) {
+                max_vertices *= 2;
+                model->positions = (vec3f_t*)realloc(model->positions, sizeof(vec3f_t) * max_vertices);
+                model->colors = (color4_t*)realloc(model->colors, sizeof(color4_t) * max_vertices);
+            }
+
+            vec3f_t pos;
+            f32 r = 1.0f, g = 1.0f, b = 1.0f; // Default white color
+            
+            // Try to parse position and optional color
+            int parsed = sscanf(line, "v %f %f %f %f %f %f", 
+                               &pos.x, &pos.y, &pos.z, &r, &g, &b);
+            
+            if (parsed >= 3) {
+                model->positions[model->vertex_count] = pos;
+                
+                model->colors[model->vertex_count] = (color4_t){255, 255, 255, 255};
+                
+                model->vertex_count++;
+            }
+        }
+        // Parse faces (only triangles supported)
+        else if (line[0] == 'f' && line[1] == ' ') {
+            // Reallocate if needed
+            if (model->index_count + 3 >= max_indices) {
+                max_indices *= 2;
+                model->indices = (u32*)realloc(model->indices, sizeof(u32) * max_indices);
+            }
+
+            u32 v1, v2, v3;
+            // Simple face parsing (assumes triangular faces with 1-based indexing)
+            if (sscanf(line, "f %u %u %u", &v1, &v2, &v3) == 3) {
+                // Convert from 1-based to 0-based indexing
+                u32 i0 = v1 - 1;
+                u32 i1 = v2 - 1;
+                u32 i2 = v3 - 1;
+                
+                // Generate random color for this triangle
+                color4_t triangle_color = get_random_color();
+                
+                // Assign the same random color to all three vertices of this triangle
+                model->colors[i0] = triangle_color;
+                model->colors[i1] = triangle_color;
+                model->colors[i2] = triangle_color;
+                
+                model->indices[model->index_count++] = i0;
+                model->indices[model->index_count++] = i1;
+                model->indices[model->index_count++] = i2;
+            }
+            // Handle face format with texture/normal indices (f v1/vt1/vn1 v2/vt2/vn2 v3/vt3/vn3)
+            else if (sscanf(line, "f %u/%*u/%*u %u/%*u/%*u %u/%*u/%*u", &v1, &v2, &v3) == 3 ||
+                     sscanf(line, "f %u//%*u %u//%*u %u//%*u", &v1, &v2, &v3) == 3 ||
+                     sscanf(line, "f %u/%*u %u/%*u %u/%*u", &v1, &v2, &v3) == 3) {
+                
+                u32 i0 = v1 - 1;
+                u32 i1 = v2 - 1;
+                u32 i2 = v3 - 1;
+                
+                color4_t triangle_color = get_random_color();
+                
+                model->colors[i0] = triangle_color;
+                model->colors[i1] = triangle_color;
+                model->colors[i2] = triangle_color;
+                
+                model->indices[model->index_count++] = i0;
+                model->indices[model->index_count++] = i1;
+                model->indices[model->index_count++] = i2;
+            }
+        }
+    }
+
+    fclose(file);
+
+    model->positions = (vec3f_t*)realloc(model->positions, sizeof(vec3f_t) * model->vertex_count);
+    model->colors = (color4_t*)realloc(model->colors, sizeof(color4_t) * model->vertex_count);
+    model->indices = (u32*)realloc(model->indices, sizeof(u32) * model->index_count);
+
+    printf("Loaded OBJ: %u vertices, %u indices (%u triangles)\n", 
+           model->vertex_count, model->index_count, model->index_count / 3);
+    return model;
+}
+
+
+fn void free_model(model_t *model)
+{
+    if (model) {
+        free(model->positions);
+        free(model->colors);
+        free(model->indices);
+        free(model);
+    }
+}
+
+fn void create_test_obj(const char *filename)
+{
+    FILE *file = fopen(filename, "w");
+    if (!file) {
+        fprintf(stderr, "Failed to create test OBJ file: %s\n", filename);
+        return;
+    }
+
+    fprintf(file, "# Simple tetrahedron\n");
+    fprintf(file, "v  0.0  1.0  0.0  1.0 0.0 0.0\n");  // Top vertex (red)
+    fprintf(file, "v -1.0 -1.0  1.0  0.0 1.0 0.0\n");  // Front left (green)
+    fprintf(file, "v  1.0 -1.0  1.0  0.0 0.0 1.0\n");  // Front right (blue)
+    fprintf(file, "v  0.0 -1.0 -1.0  1.0 1.0 0.0\n");  // Back (yellow)
+    
+    fprintf(file, "f 1 2 3\n");  // Front face
+    fprintf(file, "f 1 3 4\n");  // Right face
+    fprintf(file, "f 1 4 2\n");  // Left face
+    fprintf(file, "f 2 4 3\n");  // Bottom face
+    
+    fclose(file);
+    printf("Created test OBJ file: %s\n", filename);
 }
 
 fn void draw_line(image_view_t const *color_buf, int x0, int y0, int x1, int y1, vec4f_t const color)
@@ -869,6 +1003,11 @@ fn void draw_line(image_view_t const *color_buf, int x0, int y0, int x1, int y1,
     if (x0 > x1) {
         swap(&x0, &x1);
         swap(&y0, &y1);
+    }
+
+    if((x1 > (int)gc.screen_width || y1 > (int)gc.screen_height) ||( x0 < 0 || y0 < 0))
+    {
+        return;
     }
     
     int dx = x1 - x0;
@@ -925,6 +1064,11 @@ fn void draw_mesh(image_view_t const *color_buf, draw_command_t const *command, 
         v1 = viewport_apply(vp, v1);
         v2 = viewport_apply(vp, v2);
 
+        // Store original vertices for debug drawing
+        vec4f_t debug_v0 = v0;
+        vec4f_t debug_v1 = v1;
+        vec4f_t debug_v2 = v2;
+
         color4_t c0 = *(color4_t *)ATTR_AT(command->mesh.colors, i0);
         color4_t c1 = *(color4_t *)ATTR_AT(command->mesh.colors, i1);
         color4_t c2 = *(color4_t *)ATTR_AT(command->mesh.colors, i2);
@@ -932,7 +1076,7 @@ fn void draw_mesh(image_view_t const *color_buf, draw_command_t const *command, 
         vec4f_t v10 = vec4f_sub(&v1, &v0);
         vec4f_t v20 = vec4f_sub(&v2, &v0);  
 
-        float det012 = vec4f_det2D(&v10, &v20);
+        f32 det012 = vec4f_det2D(&v10, &v20);
 
         // is it counter-clockwise
         bool const ccw = det012 < 0.f;
@@ -984,15 +1128,15 @@ fn void draw_mesh(image_view_t const *color_buf, draw_command_t const *command, 
                 vec4f_t v02 = vec4f_sub(&v0, &v2);
                 vec4f_t vp2 = vec4f_sub(&p, &v2);
 
-                float det01p = vec4f_det2D(&v10, &vp0);
-                float det12p = vec4f_det2D(&v21, &vp1);
-                float det20p = vec4f_det2D(&v02, &vp2);
+                f32 det01p = vec4f_det2D(&v10, &vp0);
+                f32 det12p = vec4f_det2D(&v21, &vp1);
+                f32 det20p = vec4f_det2D(&v02, &vp2);
 
                 if (det01p >= 0.0f && det12p >= 0.0f && det20p >= 0.0f)
                 {
-                    float l0 = det12p / det012;
-                    float l1 = det20p / det012;
-                    float l2 = det01p / det012;
+                    f32 l0 = det12p / det012;
+                    f32 l1 = det20p / det012;
+                    f32 l2 = det01p / det012;
 
                     color4_t final_col = {
                         .r = c0.r * l0 + c1.r * l1 + c2.r * l2,
@@ -1004,6 +1148,24 @@ fn void draw_mesh(image_view_t const *color_buf, draw_command_t const *command, 
                     COLOR_BUF_AT(color_buf, x, y) = final_col;
                 }
             }
+        }
+        if(gc.debug)
+        {
+            // Debug: Draw triangle edges
+            vec4f_t debug_color = {0.537f, 0.914f, 0.992f, 1.0f}; // Red color for debug lines
+            
+            // Convert to integer coordinates for line drawing
+            int x0 = (int)roundf(debug_v0.x);
+            int y0 = (int)roundf(debug_v0.y);
+            int x1 = (int)roundf(debug_v1.x);
+            int y1 = (int)roundf(debug_v1.y);
+            int x2 = (int)roundf(debug_v2.x);
+            int y2 = (int)roundf(debug_v2.y);
+            
+            // Draw all three edges of the triangle
+            draw_line(color_buf, x0, y0, x1, y1, debug_color);
+            draw_line(color_buf, x1, y1, x2, y2, debug_color);
+            draw_line(color_buf, x2, y2, x0, y0, debug_color);
         }
     }
 }
@@ -1041,6 +1203,8 @@ fn void export_image(image_view_t const *color_buf, const char *filename)
     fclose(file);
 }
 
+model_t *model;
+
 fn void render_all(void)
 {
     curr_time += gc.dt;
@@ -1063,34 +1227,49 @@ fn void render_all(void)
         .ymax = (i32)gc.draw_buffer.height
     };
 
-    float width_scale  = MIN(1.0f, (float)gc.screen_height * 1.0f / (float)gc.screen_width);
-    float height_scale = MIN(1.0f, (float)gc.screen_width * 1.0f / (float)gc.screen_height);
+    f32 width_scale  = MIN(1.0f, (f32)gc.screen_height * 1.0f / (f32)gc.screen_width);
+    f32 height_scale = MIN(1.0f, (f32)gc.screen_width * 1.0f / (f32)gc.screen_height);
 
-    mat4x4_t aspect      = mat_scale((vec3f_t){width_scale, height_scale, 1.f});
-    mat4x4_t scale       = mat_scale_const(1.0f);
+    mat4x4_t scale       = mat_scale_const(1.f);
     mat4x4_t rotatezx    = mat_rotate_zx(curr_time);
     mat4x4_t rotatexy    = mat_rotate_xy(curr_time * 1.61f);
-    mat4x4_t perspective = mat_perspective(0.01f, 10.f, (float)(M_PI / 3.f), (float)gc.screen_width * 1.0f / (float)gc.screen_height);
+    mat4x4_t perspective = mat_perspective(0.01f, 10.f, (f32)(M_PI / 3.f), (f32)gc.screen_width * 1.0f / (f32)gc.screen_height);
     mat4x4_t translate   = mat_translate((vec3f_t){0.f, 0.f, -5.f});
 
     mat4x4_t transform = mat4x4_mult(&scale, &rotatezx);        
     transform = mat4x4_mult(&transform, &rotatexy);             
     transform = mat4x4_mult(&transform, &translate);            
     transform = mat4x4_mult(&transform, &perspective);          
-    // transform = mat4x4_mult(&transform, &aspect);            
 
-    draw_command_t cmd = {
-        .mesh = {
-            .positions = ATTR_NEW(cube_positions),
-            .colors = ATTR_NEW(cube_colors),
-            .indices = cube_indices,
-            .count = 36,
-        },
-        .transform = transform,
-        .cull_mode = CULL_MODE_CW
-    };
+    if (model) {
+        draw_command_t cmd = {
+            .mesh = {
+                .positions = ATTR_NEW(model->positions),
+                .colors = ATTR_NEW(model->colors),
+                .indices = model->indices,
+                .count = model->index_count,
+            },
+            .transform = transform,
+            .cull_mode = CULL_MODE_CW
+        };
+        draw_mesh(&gc.draw_buffer, &cmd, &vp);
+    }
+    else
+    {
+        draw_command_t cmd = {
+            .mesh = {
+                .positions = ATTR_NEW(cube_positions),
+                .colors = ATTR_NEW(cube_colors),
+                .indices = cube_indices,
+                .count = 36,
+            },
+            .transform = transform,
+            .cull_mode = CULL_MODE_CW
+        };
+    
+        draw_mesh(&gc.draw_buffer, &cmd, &vp);
+    }
 
-    draw_mesh(&gc.draw_buffer, &cmd, &vp);
     // draw_line(&gc.draw_buffer,0,0,gc.screen_width,gc.screen_height,(vec4f_t){0.0f, 0.0f, 0.5f, 1.0f});
 
     SDL_Rect rect = {
@@ -1122,7 +1301,7 @@ fn void init_all(void)
     gc.window =  (SDL_Window *)CHECK_PTR(SDL_CreateWindow("3D Renderer",
                                                           SDL_WINDOWPOS_CENTERED,
                                                           SDL_WINDOWPOS_CENTERED,
-                                                          gc.screen_width, gc.screen_height,
+                                                          (i32)gc.screen_width, (i32)gc.screen_height,
                                                           SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN));
 
     SDL_AddEventWatch(EventWatch, NULL);
@@ -1138,22 +1317,26 @@ fn void init_all(void)
     gc.rescale     = true;
     gc.render      = true;
     gc.dock        = false;
+    gc.debug       = false;
 
     gc.global_scale = 1;
+
+    gc.render_interval = 20;
+    gc.last_render_time = 0;
 
     set_dark_mode(gc.window);
 }
 
-fn float get_time_difference(void *last_time) 
+fn f32 get_time_difference(void *last_time) 
 {
-    float dt = 0.0f;
+    f32 dt = 0.0f;
 
 #ifdef WIN32
     LARGE_INTEGER now, frequency;
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&now);
     LARGE_INTEGER *last_time_win = (LARGE_INTEGER *)last_time;
-    dt = (float)(now.QuadPart - last_time_win->QuadPart) / frequency.QuadPart;
+    dt = (f32)(now.QuadPart - last_time_win->QuadPart) / frequency.QuadPart;
     *last_time_win = now;
 #else
     struct timespec now;
@@ -1185,6 +1368,13 @@ int main(int argc, char* argv[])
     clock_gettime(CLOCK_MONOTONIC, &last_frame_start);
 #endif
 
+    // create_test_obj("test_model.obj");
+
+    model = load_obj("test_model.obj");
+    if (!model) {
+        fprintf(stderr, "Failed to load model, using default cube\n");
+    }
+
     while(gc.running)
     {
         poll_events();
@@ -1200,8 +1390,8 @@ int main(int argc, char* argv[])
 
         render_all();
 
-        // float frame_time = (SDL_GetTicks() - gc.start_time);
-        // float elapsedTime = (frame_time > 0) ? frame_time : 1;
+        // f32 frame_time = (SDL_GetTicks() - gc.start_time);
+        // f32 elapsedTime = (frame_time > 0) ? frame_time : 1;
         
         // if(elapsedTime < FPS(60)){
             // SDL_Delay(FPS(60)-elapsedTime);
